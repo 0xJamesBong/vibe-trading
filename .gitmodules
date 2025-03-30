@@ -1,0 +1,12 @@
+[submodule "submodules/kamino-api"]
+	path = submodules/kamino-api
+	url = https://github.com/Kamino-Finance/kamino-api-docs.git
+[submodule "submodules/jupiter-quote"]
+	path = submodules/jupiter-quote
+	url = https://github.com/jup-ag/jupiter-quote-api-node.git
+[submodule "submodules/jupiter-swap"]
+	path = submodules/jupiter-swap
+	url = https://github.com/jup-ag/jupiter-swap-api.git
+[submodule "submodules/jupiter-raydium"]
+	path = submodules/jupiter-raydium
+	url = https://github.com/jup-ag/raydium-clmm.git

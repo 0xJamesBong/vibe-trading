@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Card, TextField, IconButton, Typography, CircularProgress } from '@mui/material';
+import { Box, Card, TextField, IconButton, Typography } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import { colors, styles } from '@/styles/theme';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -22,7 +23,12 @@ interface StrategyResponse {
 }
 
 export function ChatInterface() {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<Message[]>([
+        {
+            role: 'assistant',
+            content: 'Hey how can I assist you today?'
+        }
+    ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -39,6 +45,7 @@ export function ChatInterface() {
         setIsLoading(true);
 
         try {
+            console.log('Sending request to OpenAI...');
             const response = await fetch('/api/strategy', {
                 method: 'POST',
                 headers: {
@@ -47,26 +54,37 @@ export function ChatInterface() {
                 body: JSON.stringify({ prompt: input }),
             });
 
-            if (!response.ok) {
-                throw new Error('Failed to process strategy');
+            const data = await response.json();
+            console.log('Received response:', data);
+
+            // Handle both structured and unstructured responses
+            let aiResponse: Message;
+            if (data.error) {
+                // If it's a system error, show the error message
+                aiResponse = {
+                    role: 'assistant',
+                    content: data.error
+                };
+            } else if (data.strategy) {
+                // If it's a structured strategy response
+                aiResponse = {
+                    role: 'assistant',
+                    content: `Strategy: ${data.strategy.name}\n\nDescription: ${data.strategy.description}\n\nEntry Conditions:\n${data.strategy.conditions.entry.join('\n')}\n\nExit Conditions:\n${data.strategy.conditions.exit.join('\n')}`
+                };
+            } else {
+                // If it's a direct response from OpenAI
+                aiResponse = {
+                    role: 'assistant',
+                    content: data.response || data.content || JSON.stringify(data)
+                };
             }
 
-            const data: StrategyResponse = await response.json();
-
-            const aiResponse: Message = {
-                role: 'assistant',
-                content: `Strategy: ${data.strategy.name}\n\nDescription: ${data.strategy.description}\n\nEntry Conditions:\n${data.strategy.conditions.entry.join('\n')}\n\nExit Conditions:\n${data.strategy.conditions.exit.join('\n')}`,
-            };
-
             setMessages((prev) => [...prev, aiResponse]);
-
-            // Dispatch custom event to update strategy panel
-            const event = new CustomEvent('strategyUpdate', { detail: data });
-            window.dispatchEvent(event);
         } catch (error) {
+            console.error('Error:', error);
             const errorMessage: Message = {
                 role: 'assistant',
-                content: 'Sorry, I encountered an error while processing your strategy. Please try again.',
+                content: 'I apologize, but I encountered a technical issue. Please try again.'
             };
             setMessages((prev) => [...prev, errorMessage]);
         } finally {
@@ -75,9 +93,9 @@ export function ChatInterface() {
     };
 
     return (
-        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                <Typography variant="h6">Strategy Assistant</Typography>
+        <Card sx={styles.components.chat.container}>
+            <Box sx={styles.components.chat.header}>
+                <Typography variant="h6" sx={{ color: colors.semantic.text.primary }}>Chat</Typography>
             </Box>
 
             <Box sx={{
@@ -86,7 +104,8 @@ export function ChatInterface() {
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 2
+                gap: 2,
+                backgroundColor: colors.semantic.surface,
             }}>
                 {messages.map((message, index) => (
                     <Box
@@ -94,34 +113,55 @@ export function ChatInterface() {
                         sx={{
                             alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
                             maxWidth: '80%',
-                            bgcolor: message.role === 'user' ? 'primary.main' : 'background.paper',
                             p: 2,
                             borderRadius: 2,
-                            whiteSpace: 'pre-wrap',
+                            ...styles.components.chat.message[message.role],
                         }}
                     >
-                        <Typography>{message.content}</Typography>
+                        <Typography
+                            variant="body1"
+                            color={colors.semantic.text.primary}
+                            sx={{
+                                whiteSpace: 'pre-wrap',
+                                fontWeight: message.role === 'user' ? 600 : 400,
+                            }}
+                        >
+                            {message.content}
+                        </Typography>
                     </Box>
                 ))}
             </Box>
 
-            <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
-                <TextField
-                    fullWidth
-                    variant="outlined"
-                    placeholder="Describe your trading strategy..."
-                    value={input}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value)}
-                    onKeyPress={(e: React.KeyboardEvent) => e.key === 'Enter' && handleSend()}
-                    disabled={isLoading}
-                />
-                <IconButton
-                    color="primary"
-                    onClick={handleSend}
-                    disabled={!input.trim() || isLoading}
-                >
-                    {isLoading ? <CircularProgress size={24} /> : <SendIcon />}
-                </IconButton>
+            <Box sx={styles.components.chat.input.container}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                        fullWidth
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder="Type your message..."
+                        disabled={isLoading}
+                        sx={styles.components.textField.root}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSend();
+                            }
+                        }}
+                    />
+                    <IconButton
+                        color="primary"
+                        onClick={handleSend}
+                        disabled={isLoading || !input.trim()}
+                        sx={{
+                            ...styles.components.button.primary,
+                            '&.Mui-disabled': {
+                                backgroundColor: colors.semantic.overlay.light,
+                            },
+                        }}
+                    >
+                        <SendIcon />
+                    </IconButton>
+                </Box>
             </Box>
         </Card>
     );
