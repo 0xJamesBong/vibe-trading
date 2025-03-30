@@ -117,7 +117,8 @@ export const styles = {
       },
       header: {
         backgroundColor: colors.semantic.overlay.light,
-        borderBottom: `1px solid ${colors.semantic.border}`,
+        borderBottom: `2px 1px solid ${colors.semantic.border}`,
+        // <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
       },
       message: {
         user: {

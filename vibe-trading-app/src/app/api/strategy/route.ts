@@ -5,21 +5,49 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-interface StrategyResponse {
-  strategy: {
-    name: string;
-    description: string;
-    conditions: {
-      entry: string[];
-      exit: string[];
-    };
-  };
-  pineScript: string;
-}
+// System prompt for strategy understanding
+const STRATEGY_ANALYSIS_PROMPT = `You are an expert trading strategy analyst. Your task is to:
+1. Understand the trading strategy described by the user
+2. Break it down into key components:
+   - Entry conditions
+   - Exit conditions
+   - Risk management rules
+   - Position sizing rules
+3. Identify the required technical indicators and data points
+4. Determine the appropriate timeframe and trading pairs
 
-export async function POST(request: Request) {
+IMPORTANT: Your response must be a valid JSON object with the following structure:
+{
+  "entryConditions": string[],
+  "exitConditions": string[],
+  "riskManagement": string[],
+  "positionSizing": string[],
+  "indicators": string[],
+  "timeframe": string,
+  "tradingPairs": string[]
+}`;
+
+// System prompt for Pine Script generation
+const PINESCRIPT_PROMPT = `You are an expert Pine Script developer. Your task is to:
+1. Convert the analyzed strategy into Pine Script code
+2. Implement proper error handling and validation
+3. Add performance metrics and risk management
+4. Include clear documentation and comments
+
+The code should be production-ready and follow Pine Script best practices.`;
+
+// System prompt for contract interaction generation
+const CONTRACT_PROMPT = `You are an expert Solana smart contract developer. Your task is to:
+1. Generate the necessary contract interactions for Kamino and Jupiter
+2. Implement proper error handling and transaction management
+3. Include position sizing and risk management
+4. Add clear documentation and comments
+
+The code should be production-ready and follow Solana best practices.`;
+
+export async function POST(req: Request) {
   try {
-    const { prompt } = await request.json();
+    const { prompt } = await req.json();
 
     if (!prompt) {
       return NextResponse.json(
@@ -28,70 +56,75 @@ export async function POST(request: Request) {
       );
     }
 
-    const completion = await openai.chat.completions.create({
+    // Step 1: Strategy Analysis
+    const analysisResponse = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [
-        {
-          role: "system",
-          content: `You are a helpful trading assistant with expertise in trading strategies and technical analysis. You can engage in general conversation and provide advice, but when users ask about specific trading strategies, you should respond in a structured JSON format.
-
-For general questions, chitchat, or debugging help, respond naturally in plain text.
-
-For trading strategy requests, respond with this exact JSON structure:
-{
-  "strategy": {
-    "name": "Strategy name",
-    "description": "Detailed strategy description",
-    "conditions": {
-      "entry": ["List of entry conditions"],
-      "exit": ["List of exit conditions"]
-    }
-  },
-  "pineScript": "Generated Pine Script code",
-  "thoughts": "Additional thoughts or considerations"
-}
-
-Guidelines:
-1. For general questions or casual conversation, respond naturally without JSON formatting
-2. For strategy requests, always use the JSON structure above
-3. Be helpful and friendly in both modes
-4. When in doubt, respond naturally rather than forcing a strategy format`
-        },
-        {
-          role: "user",
-          content: prompt
-        }
+        { role: "system", content: STRATEGY_ANALYSIS_PROMPT },
+        { role: "user", content: prompt }
       ],
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 1000,
     });
-
-    const content = completion.choices[0]?.message?.content;
     
-    if (!content) {
+    const analysisContent = analysisResponse.choices[0]?.message?.content;
+    if (!analysisContent) {
       throw new Error("No content received from OpenAI");
     }
 
-    // Try to parse as JSON first
+    console.log("🌟 analysisResponse:", analysisResponse);
+    console.log("🌟 analysisContent:", analysisContent);
+    
+    let strategyAnalysis;
     try {
-      const cleanContent = content.trim().replace(/```json\n?|\n?```/g, '');
-      const parsedResponse = JSON.parse(cleanContent) as StrategyResponse;
-      
-      // If it's a valid strategy response, return it as is
-      if (parsedResponse.strategy && parsedResponse.pineScript) {
-        return NextResponse.json(parsedResponse);
-      }
-      
-      // If it's not a valid strategy response, return it as a regular response
-      return NextResponse.json({ response: content });
-    } catch (parseError) {
-      // If it's not JSON, return it as a regular response
-      return NextResponse.json({ response: content });
+      strategyAnalysis = JSON.parse(analysisContent);
+    } catch (error) {
+      console.error("Error parsing analysis content:", error);
+      throw new Error("Failed to parse strategy analysis as JSON");
     }
+    console.log("🌟 strategyAnalysis:", strategyAnalysis);
+
+    // Step 2: Pine Script Generation
+    const pineScriptResponse = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: PINESCRIPT_PROMPT },
+        { role: "user", content: JSON.stringify(strategyAnalysis) }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    });
+
+    const pineScript = pineScriptResponse.choices[0]?.message?.content;
+    if (!pineScript) {
+      throw new Error("No Pine Script content received from OpenAI");
+    }
+
+    // Step 3: Contract Interaction Generation
+    const contractResponse = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [
+        { role: "system", content: CONTRACT_PROMPT },
+        { role: "user", content: JSON.stringify(strategyAnalysis) }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    });
+
+    const contractCode = contractResponse.choices[0]?.message?.content;
+    if (!contractCode) {
+      throw new Error("No contract code received from OpenAI");
+    }
+
+    return NextResponse.json({
+      analysis: strategyAnalysis,
+      pineScript,
+      contractCode,
+    });
   } catch (error) {
-    console.error("Error processing request:", error);
+    console.error("Error in strategy generation:", error);
     return NextResponse.json(
-      { error: "Failed to process request" },
+      { error: "Failed to generate strategy" },
       { status: 500 }
     );
   }
